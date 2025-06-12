@@ -1,0 +1,85 @@
+---
+description: When ESP configurations are requested, always provide both YAML config and connections diagram documentation
+globs: 
+alwaysApply: false
+---
+# ESP Configuration Rule
+
+Rule for ESPHome/ESP32/ESP8266 configuration requests that overrides the general explicit_task_only rule.
+
+<rule>
+name: esp_configuration_override
+description: When ESP configurations are requested, always provide both YAML config and connections diagram documentation
+filters:
+  # Match requests for ESP configurations
+  - type: content
+    pattern: "(?i).*(esp32|esp8266|esphome|esp-).*(config|configuration|yaml|yml).*"
+  # Match requests mentioning microcontrollers with hardware setup
+  - type: content
+    pattern: "(?i).*(gpio|pin|relay|sensor|switch|pump|valve).*(esp32|esp8266).*"
+  # Match specific ESP board requests
+  - type: content
+    pattern: "(?i).*(esp32-s3|esp32-c3|nodemcu|wemos|devkit).*"
+
+actions:
+  - type: override
+    overrides_rule: explicit_task_only
+    message: |
+      **ESP CONFIGURATION RULE OVERRIDE**
+      
+      When creating ESP/ESPHome configurations, ALWAYS provide:
+      
+      1. **Primary YAML Configuration File**
+         - Complete ESPHome configuration
+         - Proper GPIO pin assignments
+         - Component configurations
+         - Home Assistant integration
+      
+      2. **Connections Diagram Documentation**
+         - Detailed wiring diagrams
+         - Component specifications
+         - Pin mapping tables
+         - Installation instructions
+         - Troubleshooting guide
+      
+      This override is necessary because ESP configurations are inherently hardware-dependent 
+      and require physical connections that cannot be understood without proper documentation.
+
+rationale: |
+  ESP configurations are unique because they involve:
+  - Physical hardware connections
+  - GPIO pin assignments that vary by board
+  - Power requirements and safety considerations
+  - Multiple components that must be wired correctly
+  
+  Without connection diagrams, users cannot safely implement the configuration,
+  making the YAML file alone insufficient and potentially dangerous.
+
+examples:
+  - input: |
+      User: "Create ESP32 configuration for relay control"
+      
+      # Required Output:
+      1. [device-name].yaml - Complete ESPHome configuration
+      2. connections-diagram-[device-name].md - Wiring documentation
+    
+  - input: |
+      User: "ESP8266 config for sensor monitoring"
+      
+      # Required Output:
+      1. [device-name].yaml - Complete ESPHome configuration  
+      2. connections-diagram-[device-name].md - Wiring documentation
+
+exceptions:
+  - condition: "User explicitly requests 'only YAML' or 'no documentation'"
+    action: "Revert to explicit_task_only behavior"
+  - condition: "Configuration modification/editing of existing files"
+    action: "Only modify requested files, no new documentation"
+
+metadata:
+  priority: high
+  version: 1.0
+  scope: esp_configurations
+  overrides: explicit_task_only
+</rule>
+

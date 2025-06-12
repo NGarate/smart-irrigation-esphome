@@ -1,0 +1,151 @@
+esphome:
+  name: esp32-s3-riego-basico
+  platformio_options:
+    board_build.flash_mode: dio
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Configuración WiFi para conectar con Home Assistant
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_pswd
+  
+  # Configuración de punto de acceso de respaldo
+  ap:
+    ssid: "ESP32-S3-Riego"
+    password: "riego12345"
+
+# Servidor web cautivo para configuración inicial
+captive_portal:
+
+# API para Home Assistant
+api:
+  encryption:
+    key: "U6UqQ26Vt+xYkUMrwTEdddhKFRn8wb02GGSrpNa3Zsg="
+
+# OTA para actualizaciones remotas
+ota:
+  - platform: "esphome"
+    password: !secret ota_pswd
+
+# Logger con configuración optimizada para ESP-IDF
+logger:
+  level: INFO
+  baud_rate: 115200
+
+# Configuración I2C para ADS1115
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+  id: bus_a
+
+# Configuración del hub ADS1115
+ads1115:
+  - address: 0x48
+    i2c_id: bus_a
+
+# Configuración de sensores
+sensor:
+  # JSN-SR04T - Sensor ultrasónico para nivel de agua en recipiente
+  - platform: ultrasonic
+    trigger_pin: GPIO5
+    echo_pin: GPIO4
+    name: "Nivel Agua Recipiente"
+    id: nivel_agua_recipiente
+    unit_of_measurement: "cm"
+    accuracy_decimals: 1
+    update_interval: 30s
+    timeout: 2m
+    filters:
+      - filter_out: nan
+      - median:
+          window_size: 7
+          send_every: 4
+      - lambda: |
+          // Convertir distancia a porcentaje de llenado
+          // Asumiendo recipiente de 20cm de altura
+          float altura_recipiente = 20.0;
+          float nivel_porcentaje = ((altura_recipiente - x) / altura_recipiente) * 100.0;
+          if (nivel_porcentaje > 100.0) return 100.0;
+          if (nivel_porcentaje < 0.0) return 0.0;
+          return nivel_porcentaje;
+    icon: "mdi:water-percent"
+
+  # ADS1115 - Sensor 1 de humedad del suelo
+  - platform: ads1115
+    multiplexer: 'A0_GND'
+    gain: 6.144
+    name: "Humedad Suelo Sensor 1"
+    id: humedad_suelo_1
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 60s
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - calibrate_linear:
+          # Estos valores necesitan calibración según tu sensor específico
+          - 3.3 -> 0.0    # Sensor en aire = 0% humedad
+          - 1.5 -> 100.0  # Sensor en agua = 100% humedad
+      - lambda: |
+          if (x > 100.0) return 100.0;
+          if (x < 0.0) return 0.0;
+          return x;
+    icon: "mdi:water-percent"
+
+  # ADS1115 - Sensor 2 de humedad del suelo
+  - platform: ads1115
+    multiplexer: 'A1_GND'
+    gain: 6.144
+    name: "Humedad Suelo Sensor 2"
+    id: humedad_suelo_2
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 60s
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - calibrate_linear:
+          # Estos valores necesitan calibración según tu sensor específico
+          - 3.3 -> 0.0    # Sensor en aire = 0% humedad
+          - 1.5 -> 100.0  # Sensor en agua = 100% humedad
+      - lambda: |
+          if (x > 100.0) return 100.0;
+          if (x < 0.0) return 0.0;
+          return x;
+    icon: "mdi:water-percent"
+
+  # WiFi Signal Strength
+  - platform: wifi_signal
+    name: "WiFi Signal Strength"
+    update_interval: 60s
+    icon: "mdi:wifi"
+
+# Sensores de texto para mostrar información del sistema
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+    ssid:
+      name: "Connected SSID"
+    mac_address:
+      name: "MAC Address"
+
+  - platform: version
+    name: "ESPHome Version"
+    
+# Sensores binarios para monitoreo del estado
+binary_sensor:
+  - platform: status
+    name: "Status"
+    
+# Switch para reiniciar el dispositivo remotamente
+switch:
+  - platform: restart
+    name: "Restart ESP32-S3" 

@@ -1,0 +1,87 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Explicit Task Enforcement
+
+Rule to ensure agents only perform tasks they are explicitly asked to do.
+
+<rule>
+name: explicit_task_only
+description: Agents must only do what they are explicitly asked, nothing more, nothing less
+filters:
+  - type: content
+    pattern: ".*"
+  - type: event
+    pattern: "agent_response"
+
+actions:
+  - type: enforce
+    message: |
+      **CRITICAL: Do only what is explicitly requested**
+      
+      When given a direct task or request:
+      1. Read the request carefully
+      2. Do EXACTLY what is asked
+      3. Do NOT add extra features, files, or functionality
+      4. Documentation files: Can be created if helpful, but do NOT change or delete existing documentation unless requested
+      5. Do NOT refactor unrelated code
+      6. Suggestions: May offer suggestions that would improve the output, but ALWAYS ask for user confirmation before implementing
+      7. Stop when the specific task is complete
+
+examples:
+  - input: |
+      User: "Fix the bug in line 23 of app.py"
+      
+      # Bad agent response:
+      - Fixes the bug
+      - Refactors the entire function
+      - Adds new error handling
+      - Creates unit tests
+      - Updates documentation
+      
+      # Good agent response:
+      - Fixes ONLY the bug in line 23
+      - Makes minimal necessary changes
+      - Stops when bug is fixed
+    
+  - input: |
+      User: "Add a login button to the homepage"
+      
+      # Bad agent response:
+      - Adds login button
+      - Implements entire authentication system
+      - Creates user registration
+      - Adds password reset functionality
+      - Sets up database schemas
+      
+      # Good agent response:
+      - Adds ONLY the login button to homepage
+      - Basic styling to match existing design
+      - Stops when button is added
+
+  - input: |
+      User: "Update the README with installation instructions"
+      
+      # Bad agent response:
+      - Updates README
+      - Reorganizes entire project structure
+      - Adds contributing guidelines
+      - Creates additional documentation files
+      - Updates all docstrings
+      
+      # Good agent response:
+      - Adds ONLY installation instructions to README
+      - Stops when instructions are added
+
+metadata:
+  priority: critical
+  version: 1.0
+  scope: all_interactions
+</rule>
+
+
+
+
+

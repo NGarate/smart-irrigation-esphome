@@ -1,0 +1,99 @@
+---
+description: Always use esp-idf framework in ESP YAML configs with minimal configuration
+globs: 
+alwaysApply: false
+---
+# ESP YAML Framework Enforcement
+
+Rule to enforce esp-idf framework usage in ESP configuration files with minimal config.
+
+<rule>
+name: esp_yaml_framework
+description: When ESP configurations are requested, always use esp-idf framework in ESP YAML configs with minimal configuration
+filters:
+  - type: file_extension
+    pattern: "\\.ya?ml$"
+  - type: content
+    pattern: "(?i)(esp32|esp8266|esphome)"
+
+actions:
+  - type: enforce
+    message: |
+      **ESP YAML Configuration Standards**
+      
+      When creating ESP YAML configuration files:
+      1. ALWAYS use esp-idf framework type
+      2. Use minimal configuration - only what is strictly needed
+      3. Do NOT add unnecessary advanced options unless required
+      4. Keep the configuration clean and simple
+      
+      Required framework block:
+      ```yaml
+      esp32:
+        board: [board_name]
+        framework:
+          type: esp-idf
+      ```
+
+examples:
+  - input: |
+      # Bad: Using Arduino framework or adding unnecessary config
+      esp32:
+        board: esp32-s3-devkitc-1
+        framework:
+          type: arduino
+          version: recommended
+        variant: esp32s3
+        flash_size: 16MB
+        partitions: default.csv
+      
+      # Good: Simple esp-idf framework
+      esp32:
+        board: esp32-s3-devkitc-1
+        framework:
+          type: esp-idf
+    
+  - input: |
+      # Bad: Over-configured with unnecessary options
+      esp32:
+        board: esp32dev
+        framework:
+          type: esp-idf
+          version: latest
+          platform_version: 6.4.0
+          sdkconfig_options:
+            CONFIG_FREERTOS_UNICORE: y
+            CONFIG_ESP32_DEFAULT_CPU_FREQ_240: y
+        flash_size: 4MB
+        partitions: partitions.csv
+      
+      # Good: Minimal esp-idf configuration
+      esp32:
+        board: esp32dev
+        framework:
+          type: esp-idf
+
+  - input: |
+      # Bad: Missing framework or wrong type
+      esp32:
+        board: nodemcu-32s
+      
+      # Also bad:
+      esp32:
+        board: nodemcu-32s
+        framework: arduino
+      
+      # Good: Correct minimal esp-idf setup
+      esp32:
+        board: nodemcu-32s
+        framework:
+          type: esp-idf
+
+metadata:
+  priority: high
+  version: 1.0
+  scope: esp_yaml_files
+</rule>
+
+
+

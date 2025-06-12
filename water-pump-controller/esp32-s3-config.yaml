@@ -1,0 +1,188 @@
+esphome:
+  name: esp32-s3-water-pump-controller
+  friendly_name: "Water Pump Controller"
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_pswd
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_pswd
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Water Pump Controller"
+    password: !secret app_pswd
+
+captive_portal:
+
+# Web server for local access
+web_server:
+  port: 80
+
+# I2C Bus for INA226 current monitor
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+  id: bus_a
+
+# INA226 Wiring (IMPORTANT - Two power connections needed):
+# ESP32-S3    →    INA226
+# GPIO8       →    SDA
+# GPIO9       →    SCL  
+# 3.3V        →    VCC    (chip power)
+# 3.3V        →    VBUS   (bus voltage measurement point)
+# 3.3V        →    VIN+   (high-side current measurement)
+# GND         →    GND
+# VIN-        →    To relay COM pins (low-side current measurement)
+
+# Status LED
+status_led:
+  pin:
+    number: GPIO48
+    inverted: true
+
+# Define switches for the 4-channel relay module
+switch:
+  # Pump 1 Control Relay (Channel 1)
+  - platform: gpio
+    id: pump1_relay
+    pin: 
+      number: GPIO1
+      inverted: true  # Relay modules are typically active LOW
+    internal: true  # Hide from HA, we'll use the button instead
+    
+  # Pump 2 Control Relay (Channel 2)  
+  - platform: gpio
+    id: pump2_relay
+    pin: 
+      number: GPIO2
+      inverted: true  # Relay modules are typically active LOW
+    internal: true  # Hide from HA, we'll use the button instead
+    
+# Template switches for pump control with 1-second pulse
+button:
+  # Pump 1 Control Button
+  - platform: template
+    name: "Water Pump 1"
+    id: pump1_button
+    icon: "mdi:water-pump"
+    on_press:
+      - switch.turn_on: pump1_relay
+      - delay: 1s
+      - switch.turn_off: pump1_relay
+      
+  # Pump 2 Control Button  
+  - platform: template
+    name: "Water Pump 2"
+    id: pump2_button
+    icon: "mdi:water-pump"
+    on_press:
+      - switch.turn_on: pump2_relay
+      - delay: 1s
+      - switch.turn_off: pump2_relay
+
+# Optional: Add sensors to monitor system status
+sensor:
+  # Template sensor component (required dependency for template binary_sensor and text_sensor)
+  - platform: template
+    name: "Template Dependency"
+    id: template_dependency
+    internal: true  # Hide from HA
+    lambda: |-
+      return 0;
+    update_interval: never
+    
+  # INA226 Current/Power Monitor for Pump Power Monitoring
+  - platform: ina226
+    address: 0x40
+    shunt_resistance: 0.1 ohm
+    max_current: 0.8A
+    update_interval: 1s
+    i2c_id: bus_a
+    current:
+      name: "Pump Current"
+      id: pump_current
+      accuracy_decimals: 3
+      filters:
+        - throttle_average: 2s
+    power:
+      name: "Pump Power"
+      id: pump_power
+      accuracy_decimals: 3
+      filters:
+        - throttle_average: 2s
+    bus_voltage:
+      name: "Pump Voltage"
+      id: pump_voltage
+      accuracy_decimals: 2
+      filters:
+        - throttle_average: 2s
+    shunt_voltage:
+      name: "Pump Shunt Voltage"
+      id: pump_shunt_voltage
+      accuracy_decimals: 4
+      internal: true  # Hide detailed shunt voltage from HA
+  
+  # WiFi Signal Strength
+  - platform: wifi_signal
+    name: "Water Pump Controller WiFi Signal"
+    update_interval: 60s
+    
+  # Uptime
+  - platform: uptime
+    name: "Water Pump Controller Uptime"
+    
+# Optional: Add binary sensors for pump status feedback and current alerts
+binary_sensor:
+  # Template binary sensor for pump 1 status (tracks relay state)
+  - platform: template
+    name: "Pump 1 Status"
+    id: pump1_status
+    device_class: running
+    lambda: |-
+      return id(pump1_relay).state;
+    
+  # Template binary sensor for pump 2 status (tracks relay state)
+  - platform: template
+    name: "Pump 2 Status"
+    id: pump2_status
+    device_class: running
+    lambda: |-
+      return id(pump2_relay).state;
+    
+  # Current overcurrent alert
+  - platform: template
+    name: "Overcurrent Alert"
+    id: overcurrent_alert
+    device_class: problem
+    lambda: |-
+      return id(pump_current).state > 0.5;
+    filters:
+      - delayed_on: 1s  # Avoid false alarms during startup
+
+# Optional: Add text sensors for additional info
+text_sensor:
+  - platform: version
+    name: "Water Pump Controller ESPHome Version"
+    
+  - platform: wifi_info
+    ip_address:
+      name: "Water Pump Controller IP Address"
+    ssid:
+      name: "Water Pump Controller Connected SSID" 

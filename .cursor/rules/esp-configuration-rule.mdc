@@ -1,5 +1,5 @@
 ---
-description: When ESP configurations are requested, always provide both YAML config and connections diagram documentation
+description: Always provide both YAML config and connections diagram documentation, when ESP a configuration is requested
 globs: 
 alwaysApply: false
 ---

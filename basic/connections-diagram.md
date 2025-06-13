@@ -27,7 +27,16 @@ GND           →   GND
                   ADDR → GND (dirección I2C: 0x48)
 ```
 
-### 3. JSN-SR04T - Sensor Ultrasónico
+### 3. DHT22 - Sensor de Temperatura y Humedad Ambiental
+```
+ESP32-S3          DHT22
+GPIO6         →   DATA
+GND           →   GND
+3.3V          →   VCC
+                  (Resistor 4.7kΩ entre DATA y VCC)
+```
+
+### 4. JSN-SR04T - Sensor Ultrasónico
 ```
 ESP32-S3          JSN-SR04T
 GPIO5         →   Trig
@@ -36,7 +45,7 @@ GND           →   GND
 5V            →   VCC
 ```
 
-### 4. Sensores de Humedad del Suelo Capacitivos
+### 5. Sensores de Humedad del Suelo Capacitivos
 ```
 ADS1115           Sensor 1        Sensor 2
 A0            →   Signal      
@@ -51,10 +60,19 @@ GND           →   GND         →   GND
 |----------|---------|------------|
 | GPIO5    | Trigger | JSN-SR04T |
 | GPIO4    | Echo    | JSN-SR04T |
+| GPIO6    | DATA    | DHT22 |
 | GPIO8    | SDA     | I2C Bus (ADS1115) |
 | GPIO9    | SCL     | I2C Bus (ADS1115) |
 
 ## Notas de Implementación
+
+### DHT22 - Sensor de Temperatura y Humedad
+- **Tipo**: Digital, protocolo OneWire
+- **Rango de temperatura**: -40°C a +80°C (±0.5°C precisión)
+- **Rango de humedad**: 0-100% RH (±2-5% precisión)
+- **Alimentación**: 3.3V - 5V
+- **Resistor pull-up**: 4.7kΩ entre DATA y VCC (requerido)
+- **Tiempo de respuesta**: 2 segundos
 
 ### Sensores de Humedad del Suelo
 - **Tipo**: Capacitivos (recomendados sobre resistivos)
@@ -78,38 +96,41 @@ GND           →   GND         →   GND
 
 Los siguientes sensores aparecerán automáticamente en Home Assistant:
 
-1. **Nivel Agua Recipiente** (%)
-2. **Humedad Suelo Sensor 1** (%)
-3. **Humedad Suelo Sensor 2** (%)
-4. **WiFi Signal Strength** (dBm)
-5. **Status** (binary sensor)
+1. **Temperatura Ambiente** (°C) - DHT22
+2. **Humedad Ambiente** (%) - DHT22
+3. **Nivel Agua Recipiente** (%)
+4. **Humedad Suelo Sensor 1** (%)
+5. **Humedad Suelo Sensor 2** (%)
+6. **WiFi Signal Strength** (dBm)
+7. **Status** (binary sensor)
 
 ## Instrucciones de Configuración
 
-1. **Editar credenciales WiFi** en `esp32-s3-basico.yaml`:
-   - Cambiar `TU_WIFI_SSID` por tu red WiFi
-   - Cambiar `TU_WIFI_PASSWORD` por tu contraseña WiFi
+1. **Configurar secrets.yaml**:
+   - Crear archivo `secrets.yaml` con las credenciales WiFi
+   - Generar claves API y OTA
+   - Configurar contraseñas de punto de acceso
 
-2. **Generar clave de encriptación API**:
-   - Ejecutar: `esphome config.yaml secrets`
-   - O usar: https://esphome.io/components/api.html#encryption
-
-3. **Calibrar sensores de humedad**:
+2. **Calibrar sensores de humedad**:
    - Medir voltaje en aire seco y en agua
    - Ajustar valores en `calibrate_linear`
 
-4. **Ajustar altura del recipiente**:
+3. **Ajustar altura del recipiente**:
    - Modificar `altura_recipiente` en el filtro lambda del JSN-SR04T
+
+4. **Verificar conexión DHT22**:
+   - Asegurar resistor pull-up de 4.7kΩ
+   - Verificar conexiones de alimentación y datos
 
 ## Comandos de Compilación
 
 ```bash
 # Compilar y subir
-esphome run esp32-s3-basico.yaml
+esphome run esp32-s3-config.yaml
 
 # Solo compilar
-esphome compile esp32-s3-basico.yaml
+esphome compile esp32-s3-config.yaml
 
 # Ver logs
-esphome logs esp32-s3-basico.yaml
-``` 
+esphome logs esp32-s3-config.yaml
+```

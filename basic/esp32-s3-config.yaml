@@ -16,7 +16,7 @@ wifi:
   # Configuración de punto de acceso de respaldo
   ap:
     ssid: "ESP32-S3-Riego"
-    password: "riego12345"
+    password: !secret app_pswd
 
 # Servidor web cautivo para configuración inicial
 captive_portal:
@@ -24,7 +24,7 @@ captive_portal:
 # API para Home Assistant
 api:
   encryption:
-    key: "U6UqQ26Vt+xYkUMrwTEdddhKFRn8wb02GGSrpNa3Zsg="
+    key: !secret api_key
 
 # OTA para actualizaciones remotas
 ota:
@@ -45,11 +45,43 @@ i2c:
 
 # Configuración del hub ADS1115
 ads1115:
-  - address: 0x48
+  - address: 0x40
     i2c_id: bus_a
 
 # Configuración de sensores
 sensor:
+  # DHT22 - Sensor de temperatura y humedad ambiental
+  - platform: dht
+    pin: GPIO6
+    model: DHT22
+    temperature:
+      name: "Temperatura Ambiente"
+      id: temperatura_ambiente
+      unit_of_measurement: "°C"
+      accuracy_decimals: 1
+      filters:
+        - filter_out: nan
+        - median:
+            window_size: 5
+            send_every: 3
+      icon: "mdi:thermometer"
+    humidity:
+      name: "Humedad Ambiente"
+      id: humedad_ambiente
+      unit_of_measurement: "%"
+      accuracy_decimals: 1
+      filters:
+        - filter_out: nan
+        - median:
+            window_size: 5
+            send_every: 3
+        - lambda: |
+            if (x > 100.0) return 100.0;
+            if (x < 0.0) return 0.0;
+            return x;
+      icon: "mdi:water-percent"
+    update_interval: 60s
+
   # JSN-SR04T - Sensor ultrasónico para nivel de agua en recipiente
   - platform: ultrasonic
     trigger_pin: GPIO5

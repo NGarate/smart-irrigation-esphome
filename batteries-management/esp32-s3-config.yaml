@@ -1,0 +1,134 @@
+esphome:
+  name: battery-monitor-esp32s3
+  friendly_name: "Battery Monitor ESP32-S3"
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret encryption_key
+
+ota:
+  platform: esphome
+  password: !secret ota_pswd
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_pswd
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Battery-Monitor-Esp32S3"
+    password: !secret ap_pswd
+
+captive_portal:
+
+# I2C configuration for INA226
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+  id: bus_a
+
+# INA226 sensor for battery monitoring
+sensor:
+  # INA226 Battery Monitor
+  - platform: ina226
+    i2c_id: bus_a
+    address: 0x40
+    shunt_resistance: 0.1 ohm
+    max_current: 3A
+    update_interval: 1s
+    current:
+      name: "Battery Current"
+      id: battery_current
+      unit_of_measurement: "A"
+      accuracy_decimals: 3
+      device_class: current
+      state_class: measurement
+    power:
+      name: "Battery Power"
+      id: battery_power
+      unit_of_measurement: "W"
+      accuracy_decimals: 3
+      device_class: power
+      state_class: measurement
+    bus_voltage:
+      name: "Battery Voltage"
+      id: battery_voltage
+      unit_of_measurement: "V"
+      accuracy_decimals: 2
+      device_class: voltage
+      state_class: measurement
+    shunt_voltage:
+      name: "Battery Shunt Voltage"
+      id: battery_shunt_voltage
+      unit_of_measurement: "V"
+      accuracy_decimals: 4
+      device_class: voltage
+      state_class: measurement
+      internal: true
+
+  # Battery percentage calculation
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 2
+    device_class: battery
+    state_class: measurement
+    lambda: |-
+      // Voltage range for 2x 26650 in series
+      // Full charge: ~8.4V (4.2V per cell)
+      // Empty: ~6.0V (3.0V per cell)
+      float voltage = id(battery_voltage).state;
+      float percentage = (voltage - 6.0) / (8.4 - 6.0) * 100.0;
+      if (percentage > 100.0) percentage = 100.0;
+      if (percentage < 0.0) percentage = 0.0;
+      return percentage;
+    update_interval: 10s
+
+  # WiFi signal strength
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+  # Uptime sensor
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+
+# Binary sensors
+binary_sensor:    
+  # Low battery warning
+  - platform: template
+    name: "Low Battery Warning"
+    id: low_battery_warning
+    device_class: battery
+    lambda: |-
+      return id(battery_level).state < 20.0;
+
+# Status LED (optional - using built-in LED)
+light:
+  - platform: status_led
+    name: "Status LED"
+    pin: GPIO48  # Built-in LED on ESP32-S3-DevKitC-1
+
+# Deep sleep configuration (optional - uncomment if needed)
+# deep_sleep:
+#   id: deep_sleep_1
+#   sleep_duration: 10min
+#   wakeup_pin: GPIO0
+#   wakeup_pin_mode: KEEP_AWAKE
+
+# Button to restart (optional)
+button:
+  - platform: restart
+    name: "Restart" 

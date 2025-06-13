@@ -44,7 +44,7 @@ i2c:
 # INA226 Wiring (IMPORTANT - Two power connections needed):
 # ESP32-S3    →    INA226
 # GPIO8       →    SDA
-# GPIO9       →    SCL  
+# GPIO9       →    SCL  INA226
 # 3.3V        →    VCC    (chip power)
 # 3.3V        →    VBUS   (bus voltage measurement point)
 # 3.3V        →    VIN+   (high-side current measurement)
@@ -137,7 +137,7 @@ sensor:
       name: "Pump Shunt Voltage"
       id: pump_shunt_voltage
       accuracy_decimals: 4
-      internal: true  # Hide detailed shunt voltage from HA
+        # Hide detailed shunt voltage from HA
   
   # WiFi Signal Strength
   - platform: wifi_signal

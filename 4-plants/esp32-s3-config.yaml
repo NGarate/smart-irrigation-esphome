@@ -1,294 +1,455 @@
-# Automatizaciones Home Assistant para Sistema de Riego
-# Agregar estas automatizaciones en configuration.yaml o en archivos separados
+esphome:
+  name: esp32-s3-4plants
+  friendly_name: "4 Plants Irrigation Controller"
 
-automation:
-  # Alerta cuando el nivel de agua está bajo
-  - alias: "Alerta Nivel Agua Bajo"
-    description: "Notifica cuando el nivel de agua en el depósito está bajo"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.nivel_agua_bajo
-        to: 'on'
-    action:
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "🚨 Sistema de Riego"
-          message: "⚠️ Nivel de agua bajo en el depósito. Rellenar antes del próximo riego."
-          data:
-            priority: high
-            channel: riego_alerts
-      - service: persistent_notification.create
-        data:
-          title: "Sistema de Riego - Agua Baja"
-          message: "El nivel de agua en el depósito está por debajo del mínimo. Revisar y rellenar."
-          notification_id: agua_baja
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
 
-  # Riego matutino programado (7:00 AM)
-  - alias: "Riego Matutino Automático"
-    description: "Riego automático todas las mañanas a las 7:00"
-    trigger:
-      - platform: time
-        at: "07:00:00"
-    condition:
-      - condition: state
-        entity_id: switch.riego_automatico_habilitado
-        state: 'on'
-      - condition: state
-        entity_id: binary_sensor.nivel_agua_bajo
-        state: 'off'
-      - condition: numeric_state
-        entity_id: sensor.humedad_ambiente
-        below: 80  # No regar si hay mucha humedad ambiente
-    action:
-      - service: script.riego_secuencial_todas_plantas
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "🌱 Riego Matutino"
-          message: "Iniciado riego automático matutino para todas las plantas"
+# Enable logging
+logger:
 
-  # Riego vespertino programado (19:00 PM)
-  - alias: "Riego Vespertino Automático"
-    description: "Riego automático en la tarde a las 19:00"
-    trigger:
-      - platform: time
-        at: "19:00:00"
-    condition:
-      - condition: state
-        entity_id: switch.riego_automatico_habilitado
-        state: 'on'
-      - condition: state
-        entity_id: binary_sensor.nivel_agua_bajo
-        state: 'off'
-      - condition: numeric_state
-        entity_id: sensor.temperatura_ambiente
-        above: 25  # Solo si la temperatura es alta
-    action:
-      - service: script.riego_secuencial_todas_plantas
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "🌅 Riego Vespertino"
-          message: "Iniciado riego automático vespertino debido a alta temperatura"
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret encryption_key
 
-  # Alerta de consumo eléctrico alto
-  - alias: "Alerta Consumo Alto"
-    description: "Notifica si el consumo eléctrico es anormalmente alto"
-    trigger:
-      - platform: numeric_state
-        entity_id: sensor.potencia_consumida
-        above: 15  # Watts - ajustar según sistema
-        for:
-          minutes: 5
-    action:
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "⚡ Sistema de Riego"
-          message: "Consumo eléctrico alto detectado: {{ states('sensor.potencia_consumida') }}W. Revisar sistema."
-          data:
-            priority: high
+# Enable WiFi for Home Assistant integration
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_pswd
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "ESP32-S3-4Plants"
+    password: !secret ap_pswd
 
-  # Reporte diario del estado del sistema
-  - alias: "Reporte Diario Sistema Riego"
-    description: "Envía reporte diario con el estado del sistema"
-    trigger:
-      - platform: time
-        at: "20:00:00"
-    action:
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "📊 Reporte Diario Riego"
-          message: |
-            🌡️ Temp: {{ states('sensor.temperatura_ambiente') }}°C
-            💧 Humedad: {{ states('sensor.humedad_ambiente') }}%
-            🪣 Nivel agua: {{ states('sensor.nivel_agua_deposito') }}cm
-            ⚡ Consumo: {{ states('sensor.potencia_consumida') }}W
-            
-            Humedad plantas:
-            🌱1: {{ states('sensor.humedad_suelo_planta_1') }}%
-            🌱2: {{ states('sensor.humedad_suelo_planta_2') }}%
-            🌱3: {{ states('sensor.humedad_suelo_planta_3') }}%
-            🌱4: {{ states('sensor.humedad_suelo_planta_4') }}%
+captive_portal:
 
-  # Suspender riego en días lluviosos (requiere sensor de lluvia o integración clima)
-  - alias: "Suspender Riego Día Lluvioso"
-    description: "Desactiva riego automático en días lluviosos"
-    trigger:
-      - platform: state
-        entity_id: weather.home  # Cambiar por tu entidad de clima
-        attribute: condition
-        to: 'rainy'
-    action:
-      - service: switch.turn_off
-        entity_id: switch.riego_automatico_habilitado
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "🌧️ Riego Suspendido"
-          message: "Riego automático desactivado debido a lluvia detectada"
+# OTA for updates via WiFi
+ota:
+  - platform: esphome
+    password: !secret ota_pswd
 
-  # Reactivar riego después de lluvia
-  - alias: "Reactivar Riego Post Lluvia"
-    description: "Reactiva riego automático después de la lluvia"
-    trigger:
-      - platform: state
-        entity_id: weather.home
-        attribute: condition
-        from: 'rainy'
-    condition:
-      - condition: template
-        value_template: "{{ not is_state_attr('weather.home', 'condition', 'rainy') }}"
-    action:
-      - delay: '02:00:00'  # Esperar 2 horas después de que pare la lluvia
-      - service: switch.turn_on
-        entity_id: switch.riego_automatico_habilitado
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "☀️ Riego Reactivado"
-          message: "Riego automático reactivado después de finalizar la lluvia"
+# I2C Bus for ADS1115 ADC module
+i2c:
+  sda: GPIO8
+  scl: GPIO9
+  scan: true
+  id: bus_a
 
-# Scripts personalizados
-script:
-  # Script para riego secuencial de todas las plantas
-  riego_secuencial_todas_plantas:
-    alias: "Riego Secuencial Todas las Plantas"
-    sequence:
-      - condition: state
-        entity_id: binary_sensor.nivel_agua_bajo
-        state: 'off'
-      
-      # Regar Planta 1
-      - condition: numeric_state
-        entity_id: sensor.humedad_suelo_planta_1
-        above: 30  # Solo regar si humedad > 30%
-      - service: button.press
-        entity_id: button.regar_planta_1_manual
-      - delay: '00:00:35'  # Esperar a que termine riego + 5s buffer
-      
-      # Regar Planta 2
-      - condition: numeric_state
-        entity_id: sensor.humedad_suelo_planta_2
-        above: 30
-      - service: button.press
-        entity_id: button.regar_planta_2_manual
-      - delay: '00:00:35'
-      
-      # Regar Planta 3
-      - condition: numeric_state
-        entity_id: sensor.humedad_suelo_planta_3
-        above: 30
-      - service: button.press
-        entity_id: button.regar_planta_3_manual
-      - delay: '00:00:35'
-      
-      # Regar Planta 4
-      - condition: numeric_state
-        entity_id: sensor.humedad_suelo_planta_4
-        above: 30
-      - service: button.press
-        entity_id: button.regar_planta_4_manual
+# ADS1115 ADC module for soil moisture sensors
+ads1115:
+  - address: 0x48
+    i2c_id: bus_a
+    id: ads1115_hub
 
-  # Script de riego de emergencia (todas las plantas)
-  riego_emergencia:
-    alias: "Riego de Emergencia"
-    sequence:
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "🚨 Riego de Emergencia"
-          message: "Iniciando riego de emergencia para todas las plantas"
-      
-      - service: button.press
-        entity_id: 
-          - button.regar_planta_1_manual
-          - button.regar_planta_2_manual
-          - button.regar_planta_3_manual
-          - button.regar_planta_4_manual
+# Calibration values for soil moisture sensors
+globals:
+  # Plant 1 calibration
+  - id: plant1_calibration_dry
+    type: float
+    restore_value: yes
+    initial_value: '3.3'
+  - id: plant1_calibration_wet
+    type: float
+    restore_value: yes
+    initial_value: '1.5'
 
-  # Script para calibración de sensores
-  calibracion_sensores:
-    alias: "Modo Calibración Sensores"
-    sequence:
-      - service: switch.turn_off
-        entity_id: switch.riego_automatico_habilitado
-      - service: notify.mobile_app_tu_dispositivo
-        data:
-          title: "🔧 Modo Calibración"
-          message: |
-            Sistema en modo calibración. Valores actuales:
-            Planta 1: {{ states('sensor.humedad_suelo_planta_1') }}%
-            Planta 2: {{ states('sensor.humedad_suelo_planta_2') }}%
-            Planta 3: {{ states('sensor.humedad_suelo_planta_3') }}%
-            Planta 4: {{ states('sensor.humedad_suelo_planta_4') }}%
+  # Plant 2 calibration
+  - id: plant2_calibration_dry
+    type: float
+    restore_value: yes
+    initial_value: '3.3'
+  - id: plant2_calibration_wet
+    type: float
+    restore_value: yes
+    initial_value: '1.5'
 
-# Sensores adicionales
+  # Plant 3 calibration
+  - id: plant3_calibration_dry
+    type: float
+    restore_value: yes
+    initial_value: '3.3'
+  - id: plant3_calibration_wet
+    type: float
+    restore_value: yes
+    initial_value: '1.5'
+
+  # Plant 4 calibration
+  - id: plant4_calibration_dry
+    type: float
+    restore_value: yes
+    initial_value: '3.3'
+  - id: plant4_calibration_wet
+    type: float
+    restore_value: yes
+    initial_value: '1.5'
+
+# Water tank level sensor (JSN-SR04T)
 sensor:
-  # Promedio de humedad de todas las plantas
+  # Water tank level sensor
+  - platform: ultrasonic
+    trigger_pin: GPIO3
+    echo_pin: GPI46
+    name: "Water Tank Level"
+    id: water_tank_level
+    unit_of_measurement: "cm"
+    accuracy_decimals: 1
+    update_interval: 60s
+    timeout: 2m
+    filters:
+      - filter_out: nan
+      - median:
+          window_size: 5
+          send_every: 3
+      - lambda: |
+          // Convert distance to percentage (assuming 30cm tank height)
+          float tank_height = 30.0;
+          float level_percentage = ((tank_height - x) / tank_height) * 100.0;
+          if (level_percentage > 100.0) return 100.0;
+          if (level_percentage < 0.0) return 0.0;
+          return level_percentage;
+    icon: "mdi:water-percent"
+
+  # Plant 1 Soil Moisture Sensor
+  - platform: ads1115
+    multiplexer: 'A0_GND'
+    gain: 6.144
+    name: "Plant 1 Soil Moisture"
+    id: plant1_moisture_raw
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 30s
+    ads1115_id: ads1115_hub
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - lambda: |
+          // Dynamic calibration using global variables
+          float dry_val = id(plant1_calibration_dry);
+          float wet_val = id(plant1_calibration_wet);
+          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
+          if (percentage > 100.0) return 100.0;
+          if (percentage < 0.0) return 0.0;
+          return percentage;
+    icon: "mdi:water-percent"
+
+  # Plant 2 Soil Moisture Sensor
+  - platform: ads1115
+    multiplexer: 'A1_GND'
+    gain: 6.144
+    name: "Plant 2 Soil Moisture"
+    id: plant2_moisture_raw
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 30s
+    ads1115_id: ads1115_hub
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - lambda: |
+          float dry_val = id(plant2_calibration_dry);
+          float wet_val = id(plant2_calibration_wet);
+          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
+          if (percentage > 100.0) return 100.0;
+          if (percentage < 0.0) return 0.0;
+          return percentage;
+    icon: "mdi:water-percent"
+
+  # Plant 3 Soil Moisture Sensor
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 6.144
+    name: "Plant 3 Soil Moisture"
+    id: plant3_moisture_raw
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 30s
+    ads1115_id: ads1115_hub
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - lambda: |
+          float dry_val = id(plant3_calibration_dry);
+          float wet_val = id(plant3_calibration_wet);
+          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
+          if (percentage > 100.0) return 100.0;
+          if (percentage < 0.0) return 0.0;
+          return percentage;
+    icon: "mdi:water-percent"
+
+  # Plant 4 Soil Moisture Sensor
+  - platform: ads1115
+    multiplexer: 'A3_GND'
+    gain: 6.144
+    name: "Plant 4 Soil Moisture"
+    id: plant4_moisture_raw
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 30s
+    ads1115_id: ads1115_hub
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - lambda: |
+          float dry_val = id(plant4_calibration_dry);
+          float wet_val = id(plant4_calibration_wet);
+          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
+          if (percentage > 100.0) return 100.0;
+          if (percentage < 0.0) return 0.0;
+          return percentage;
+    icon: "mdi:water-percent"
+
+  # System uptime
+  - platform: uptime
+    name: "System Uptime"
+    update_interval: 60s
+
+# Relay control switches for pumps
+switch:
+  # Plant 1 Pump Relay
+  - platform: gpio
+    id: plant1_pump_relay
+    pin: 
+      number: GPIO11
+      inverted: true  # Relay modules are typically active LOW
+    internal: true  # Hide from HA, use buttons instead
+
+  # Plant 2 Pump Relay
+  - platform: gpio
+    id: plant2_pump_relay
+    pin: 
+      number: GPIO12
+      inverted: true
+    internal: true
+
+  # Plant 3 Pump Relay
+  - platform: gpio
+    id: plant3_pump_relay
+    pin: 
+      number: GPIO13
+      inverted: true
+    internal: true
+
+  # Plant 4 Pump Relay
+  - platform: gpio
+    id: plant4_pump_relay
+    pin: 
+      number: GPIO14
+      inverted: true
+    internal: true
+
+# System restart button
+button:
+  - platform: restart
+    name: "Restart System"
+
+# Binary sensors for status monitoring
+binary_sensor:
+  # Low water level alert
   - platform: template
-    sensors:
-      humedad_promedio_plantas:
-        friendly_name: "Humedad Promedio Plantas"
-        unit_of_measurement: "%"
-        value_template: |
-          {% set h1 = states('sensor.humedad_suelo_planta_1') | float %}
-          {% set h2 = states('sensor.humedad_suelo_planta_2') | float %}
-          {% set h3 = states('sensor.humedad_suelo_planta_3') | float %}
-          {% set h4 = states('sensor.humedad_suelo_planta_4') | float %}
-          {{ ((h1 + h2 + h3 + h4) / 4) | round(1) }}
+    name: "Low Water Level"
+    id: low_water_level
+    device_class: problem
+    lambda: 'return id(water_tank_level).state < 10.0;'
 
-  # Estado general del sistema
+# Number inputs for Home Assistant control
+number:
+  # Plant 1 Calibration Controls
   - platform: template
-    sensors:
-      estado_general_riego:
-        friendly_name: "Estado General Sistema Riego"
-        value_template: |
-          {% if is_state('binary_sensor.nivel_agua_bajo', 'on') %}
-            Agua Baja
-          {% elif is_state('switch.riego_automatico_habilitado', 'off') %}
-            Deshabilitado
-          {% elif states('sensor.humedad_promedio_plantas') | float > 50 %}
-            Plantas Secas
-          {% elif states('sensor.humedad_promedio_plantas') | float < 20 %}
-            Plantas Húmedas
-          {% else %}
-            OK
-          {% endif %}
-        icon_template: |
-          {% if is_state('binary_sensor.nivel_agua_bajo', 'on') %}
-            mdi:water-alert
-          {% elif is_state('switch.riego_automatico_habilitado', 'off') %}
-            mdi:power-off
-          {% else %}
-            mdi:sprinkler
-          {% endif %}
+    name: "Plant 1 Calibration Dry"
+    id: plant1_cal_dry_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 3.3
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant1_calibration_dry
+          value: !lambda 'return x;'
 
-# Inputs para configuración avanzada
-input_boolean:
-  riego_modo_vacaciones:
-    name: "Modo Vacaciones"
-    icon: mdi:airplane
+  - platform: template
+    name: "Plant 1 Calibration Wet"
+    id: plant1_cal_wet_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 1.5
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant1_calibration_wet
+          value: !lambda 'return x;'
 
-  riego_solo_noche:
-    name: "Riego Solo Nocturno"
-    icon: mdi:weather-night
+  # Plant 2 Calibration Controls
+  - platform: template
+    name: "Plant 2 Calibration Dry"
+    id: plant2_cal_dry_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 3.3
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant2_calibration_dry
+          value: !lambda 'return x;'
 
-input_number:
-  riego_frecuencia_horas:
-    name: "Frecuencia de Riego (horas)"
-    min: 1
-    max: 72
-    step: 1
-    initial: 12
-    unit_of_measurement: "h"
+  - platform: template
+    name: "Plant 2 Calibration Wet"
+    id: plant2_cal_wet_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 1.5
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant2_calibration_wet
+          value: !lambda 'return x;'
 
-  umbral_temperatura_riego:
-    name: "Temperatura Mínima para Riego"
-    min: 15
-    max: 40
-    step: 1
-    initial: 20
-    unit_of_measurement: "°C"
+  # Plant 3 Calibration Controls
+  - platform: template
+    name: "Plant 3 Calibration Dry"
+    id: plant3_cal_dry_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 3.3
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant3_calibration_dry
+          value: !lambda 'return x;'
 
-# Notificaciones personalizadas
-notify:
-  - platform: group
-    name: familia_riego
-    services:
-      - service: mobile_app_telefono_papa
-      - service: mobile_app_telefono_mama 
+  - platform: template
+    name: "Plant 3 Calibration Wet"
+    id: plant3_cal_wet_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 1.5
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant3_calibration_wet
+          value: !lambda 'return x;'
+
+  # Plant 4 Calibration Controls
+  - platform: template
+    name: "Plant 4 Calibration Dry"
+    id: plant4_cal_dry_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 3.3
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant4_calibration_dry
+          value: !lambda 'return x;'
+
+  - platform: template
+    name: "Plant 4 Calibration Wet"
+    id: plant4_cal_wet_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.3
+    step: 0.1
+    initial_value: 1.5
+    restore_value: true
+    unit_of_measurement: "V"
+    mode: box
+    set_action:
+      - globals.set:
+          id: plant4_calibration_wet
+          value: !lambda 'return x;'
+
+# ESPHome Sprinkler Controller for automatic irrigation
+sprinkler:
+  - id: plant_irrigation_controller
+    main_switch: "Irrigation System"
+    auto_advance_switch: "Auto Advance"
+    valve_open_delay: 2s
+    valves:
+      - valve_switch: "Plant 1"
+        enable_switch: "Enable Plant 1"
+        run_duration_number:
+          id: plant1_duration_number
+          name: "Plant 1 Run Duration"
+          initial_value: 30
+          min_value: 5
+          max_value: 300
+          step: 5
+          unit_of_measurement: "s"
+          mode: box
+        valve_switch_id: plant1_pump_relay
+      - valve_switch: "Plant 2"
+        enable_switch: "Enable Plant 2"
+        run_duration_number:
+          id: plant2_duration_number
+          name: "Plant 2 Run Duration"
+          initial_value: 30
+          min_value: 5
+          max_value: 300
+          step: 5
+          unit_of_measurement: "s"
+          mode: box
+        valve_switch_id: plant2_pump_relay
+      - valve_switch: "Plant 3"
+        enable_switch: "Enable Plant 3"
+        run_duration_number:
+          id: plant3_duration_number
+          name: "Plant 3 Run Duration"
+          initial_value: 30
+          min_value: 5
+          max_value: 300
+          step: 5
+          unit_of_measurement: "s"
+          mode: box
+        valve_switch_id: plant3_pump_relay
+      - valve_switch: "Plant 4"
+        enable_switch: "Enable Plant 4"
+        run_duration_number:
+          id: plant4_duration_number
+          name: "Plant 4 Run Duration"
+          initial_value: 30
+          min_value: 5
+          max_value: 300
+          step: 5
+          unit_of_measurement: "s"
+          mode: box
+        valve_switch_id: plant4_pump_relay
+
+# Text sensors for system information
+text_sensor:
+  - platform: version
+    name: "ESPHome Version" 

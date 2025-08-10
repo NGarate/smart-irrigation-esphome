@@ -1,0 +1,370 @@
+# Reusable per-plant package
+# Required substitutions:
+#   plant: numeric id as string (e.g., "1")
+#   mux: ADS1115 multiplexer (e.g., A0_GND)
+#   relay_gpio: GPIO pin for the plant's pump relay (e.g., GPIO11)
+
+substitutions:
+  plant: "1"
+  mux: "A0_GND"
+  relay_gpio: "GPIO11"
+  idx: "0"
+
+# No per-plant globals here; arrays are declared in main YAML
+
+sensor:
+  # Plant Soil Moisture (ADS1115)
+  - platform: ads1115
+    multiplexer: '${mux}'
+    ads1115_id: ads1115_hub
+    gain: 6.144
+    id: plant${plant}_moisture_raw
+    name: 'Plant ${plant} Soil Moisture'
+    unit_of_measurement: '%'
+    accuracy_decimals: 1
+    update_interval: never
+    filters:
+      - median:
+          window_size: 5
+          send_every: 3
+      - lambda: |
+          float dry_val = id(calibration_dry)[${idx}];
+          float wet_val = id(calibration_wet)[${idx}];
+          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0f;
+          if (percentage > 100.0f) return 100.0f;
+          if (percentage < 0.0f) return 0.0f;
+          return percentage;
+    icon: 'mdi:water-percent'
+    on_value:
+      then:
+        - lambda: |
+            uint32_t now_ts = id(sntp_time).now().timestamp;
+            id(prev_moisture_pct)[${idx}] = id(last_moisture_pct)[${idx}];
+            id(prev_moisture_ts)[${idx}] = id(last_moisture_ts)[${idx}];
+            id(last_moisture_pct)[${idx}] = id(plant${plant}_moisture_raw).state;
+            id(last_moisture_ts)[${idx}] = now_ts;
+            if (id(enable_auto_plant${plant}).state && !id(irrigation_active)) {
+              if (now_ts >= id(lockout_until)[${idx}]) {
+                if (id(plant${plant}_moisture_raw).state < id(plant${plant}_start_threshold_pct).state) {
+                  id(irrigate_plant${plant}).execute();
+                }
+              }
+            }
+
+  # Telemetry
+  - platform: template
+    name: 'Plant ${plant} Last Session Cycles'
+    id: plant${plant}_last_session_cycles_sensor
+    unit_of_measurement: 'cycles'
+    update_interval: never
+    lambda: 'return (float) id(last_session_cycles)[${idx}];'
+  - platform: template
+    name: 'Plant ${plant} Last Session Duration (s)'
+    id: plant${plant}_last_session_duration_s_sensor
+    unit_of_measurement: 's'
+    update_interval: never
+    lambda: 'return (float) id(last_session_duration_s)[${idx}];'
+  - platform: template
+    name: 'Plant ${plant} Lockout Remaining (min)'
+    id: plant${plant}_lockout_remaining_min
+    unit_of_measurement: 'min'
+    update_interval: 30s
+    lambda: |
+      uint32_t now_ts = id(sntp_time).now().timestamp;
+      if (id(lockout_until)[${idx}] > now_ts) {
+        return (float)(id(lockout_until)[${idx}] - now_ts) / 60.0f;
+      }
+      return 0.0f;
+
+switch:
+  # Pump relay per plant
+  - platform: gpio
+    id: plant${plant}_pump_relay
+    pin: ${relay_gpio}
+    internal: true
+    on_turn_on:
+      - lambda: |
+          id(irrigation_active) = true;
+          id(active_plant_id) = ${plant};
+
+  # Auto Enable switch per plant
+  - platform: template
+    name: 'Auto Enable Plant ${plant}'
+    id: enable_auto_plant${plant}
+    optimistic: true
+    restore_mode: 'RESTORE_DEFAULT_ON'
+
+button:
+  - platform: template
+    name: 'Irrigate Plant ${plant}'
+    id: irrigate_btn_plant${plant}
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: 'return !id(irrigation_active);'
+            then:
+              - script.execute: irrigate_plant${plant}
+        - if:
+            condition:
+              lambda: 'return id(irrigation_active) && id(active_plant_id) == ${plant};'
+            then:
+              - lambda: 'id(manual_stop_requested) = true;'
+
+text_sensor:
+  - platform: template
+    name: 'Session Reason Plant ${plant}'
+    id: session_reason_plant${plant}
+    update_interval: never
+  - platform: template
+    name: 'Irrigation State Plant ${plant}'
+    id: irrigation_state_plant${plant}
+    update_interval: never
+
+number:
+  # Calibration controls
+  - platform: template
+    name: 'Plant ${plant} Calibration Dry'
+    id: plant${plant}_cal_dry_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.5
+    step: 0.1
+    initial_value: 3.3
+    restore_value: true
+    unit_of_measurement: 'V'
+    mode: box
+    set_action:
+      - lambda: 'id(calibration_dry)[${idx}] = x;'
+  - platform: template
+    name: 'Plant ${plant} Calibration Wet'
+    id: plant${plant}_cal_wet_input
+    optimistic: true
+    min_value: 0.0
+    max_value: 3.5
+    step: 0.1
+    initial_value: 1.5
+    restore_value: true
+    unit_of_measurement: 'V'
+    mode: box
+    set_action:
+      - lambda: 'id(calibration_wet)[${idx}] = x;'
+
+  # Thresholds and timings
+  - platform: template
+    name: 'Plant ${plant} Start Threshold (%)'
+    id: plant${plant}_start_threshold_pct
+    entity_category: config
+    optimistic: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 30
+    restore_value: true
+    unit_of_measurement: '%'
+    mode: slider
+  - platform: template
+    name: 'Plant ${plant} Stop Threshold (%)'
+    id: plant${plant}_stop_threshold_pct
+    entity_category: config
+    optimistic: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 40
+    restore_value: true
+    unit_of_measurement: '%'
+    mode: slider
+  - platform: template
+    name: 'Plant ${plant} Pump ON (s)'
+    id: plant${plant}_pump_on_s
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 600
+    step: 1
+    initial_value: 10
+    restore_value: true
+    unit_of_measurement: 's'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Soak (s)'
+    id: plant${plant}_soak_s
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 600
+    step: 1
+    initial_value: 30
+    restore_value: true
+    unit_of_measurement: 's'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Sensor Stabilize (s)'
+    id: plant${plant}_sensor_stabilize_s
+    entity_category: config
+    optimistic: true
+    min_value: 0
+    max_value: 60
+    step: 1
+    initial_value: 3
+    restore_value: true
+    unit_of_measurement: 's'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Irrigation Sample (s)'
+    id: plant${plant}_irrigation_sampling_interval_s
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 10
+    step: 1
+    initial_value: 2
+    restore_value: true
+    unit_of_measurement: 's'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} ROC Threshold (%/s)'
+    id: plant${plant}_roc_threshold_pct_per_s
+    entity_category: config
+    optimistic: true
+    min_value: 0.05
+    max_value: 5.0
+    step: 0.05
+    initial_value: 0.2
+    restore_value: true
+    unit_of_measurement: '%/s'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Max Stabilize (s)'
+    id: plant${plant}_max_stabilize_s
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 120
+    step: 1
+    initial_value: 30
+    restore_value: true
+    unit_of_measurement: 's'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Max Cycles'
+    id: plant${plant}_max_cycles
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 20
+    step: 1
+    initial_value: 8
+    restore_value: true
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Max Session (s)'
+    id: plant${plant}_max_session_s
+    entity_category: config
+    optimistic: true
+    min_value: 30
+    max_value: 3600
+    step: 10
+    initial_value: 600
+    restore_value: true
+    unit_of_measurement: 's'
+    mode: box
+  - platform: template
+    name: 'Plant ${plant} Lockout (min)'
+    id: plant${plant}_post_session_lockout_min
+    entity_category: config
+    optimistic: true
+    min_value: 0
+    max_value: 720
+    step: 5
+    initial_value: 60
+    restore_value: true
+    unit_of_measurement: 'min'
+    mode: box
+
+script:
+  - id: irrigate_plant${plant}
+    mode: restart
+    then:
+      - lambda: |
+          if (id(irrigation_active)) return;
+          id(irrigation_active) = true;
+          id(active_plant_id) = ${plant};
+          id(cycle_count)[${idx}] = 0;
+          id(session_start_ts) = id(sntp_time).now().timestamp;
+          id(irrigation_state_plant${plant}).publish_state("Cycling");
+      - while:
+          condition:
+            lambda: |
+              int elapsed = (int)(id(sntp_time).now().timestamp - id(session_start_ts));
+              bool under = id(plant${plant}_moisture_raw).state < id(plant${plant}_stop_threshold_pct).state;
+              bool caps_ok = (id(cycle_count)[${idx}] < (int) id(plant${plant}_max_cycles).state) && (elapsed < (int) id(plant${plant}_max_session_s).state);
+              bool manual = id(manual_stop_requested);
+              return under && caps_ok && !manual;
+          then:
+            - lambda: |
+                if (id(water_tank_level).state < 10.0) {
+                  id(session_reason_plant${plant}).publish_state("TankEmpty");
+                  id(irrigation_state_plant${plant}).publish_state("Error");
+                  id(irrigation_active) = false;
+                  id(active_plant_id) = 0;
+                  return;
+                }
+            - switch.turn_on: plant${plant}_pump_relay
+            - delay: !lambda |-
+                return (uint32_t)(id(plant${plant}_pump_on_s).state * 1000);
+            - switch.turn_off: plant${plant}_pump_relay
+            - lambda: |
+                id(cycle_count)[${idx}] += 1;
+                id(irrigation_state_plant${plant}).publish_state("Soaking");
+            - delay: !lambda |-
+                return (uint32_t)(id(plant${plant}_soak_s).state * 1000);
+            - lambda: |
+                id(irrigation_state_plant${plant}).publish_state("Stabilize");
+            - delay: !lambda |-
+                return (uint32_t)(id(plant${plant}_sensor_stabilize_s).state * 1000);
+            - lambda: |
+                id(stabilizing_loop_active) = true;
+                id(stabilize_deadline_ts) = id(sntp_time).now().timestamp + (uint32_t) id(plant${plant}_max_stabilize_s).state;
+            - while:
+                condition:
+                  lambda: |
+                    if (!id(stabilizing_loop_active)) return false;
+                    uint32_t now_ts = id(sntp_time).now().timestamp;
+                    if (now_ts >= id(stabilize_deadline_ts)) return false;
+                    float prev = id(prev_moisture_pct)[${idx}];
+                    float last = id(last_moisture_pct)[${idx}];
+                    uint32_t prev_ts = id(prev_moisture_ts)[${idx}];
+                    uint32_t last_ts = id(last_moisture_ts)[${idx}];
+                    if (last_ts <= prev_ts) return true;
+                    float dt = (float)(last_ts - prev_ts);
+                    float roc = fabsf((last - prev) / dt);
+                    id(current_roc) = roc;
+                    return roc > id(plant${plant}_roc_threshold_pct_per_s).state;
+                then:
+                  - delay: !lambda |-
+                      return (uint32_t)(id(plant${plant}_irrigation_sampling_interval_s).state * 1000);
+                  - component.update: plant${plant}_moisture_raw
+            - lambda: |
+                id(stabilizing_loop_active) = false;
+                id(irrigation_state_plant${plant}).publish_state("Check");
+                id(plant${plant}_moisture_raw).update();
+      - lambda: |
+          uint32_t end_ts = id(sntp_time).now().timestamp;
+          id(last_session_cycles)[${idx}] = id(cycle_count)[${idx}];
+          id(last_session_duration_s)[${idx}] = (int)(end_ts - id(session_start_ts));
+          if (id(manual_stop_requested)) {
+            id(session_reason_plant${plant}).publish_state("ManualStop");
+          } else if (id(plant${plant}_moisture_raw).state >= id(plant${plant}_stop_threshold_pct).state) {
+            id(session_reason_plant${plant}).publish_state("Completed");
+          } else {
+            id(session_reason_plant${plant}).publish_state("Capped");
+          }
+          id(irrigation_state_plant${plant}).publish_state("Lockout");
+          id(lockout_until)[${idx}] = end_ts + (uint32_t) (id(plant${plant}_post_session_lockout_min).state * 60.0f);
+          id(irrigation_active) = false;
+          id(active_plant_id) = 0;
+          id(manual_stop_requested) = false;
+
+

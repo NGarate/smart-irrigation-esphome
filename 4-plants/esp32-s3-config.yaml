@@ -1,13 +1,45 @@
 esphome:
   name: esp32-s3-4plants
   friendly_name: "4 Plants Irrigation Controller"
+  includes: []
+packages:
+  plant1: !include
+    file: packages/plant.yaml
+    vars:
+      plant: "1"
+      mux: "A0_GND"
+      relay_gpio: "GPIO11"
+      idx: "0"
+  plant2: !include
+    file: packages/plant.yaml
+    vars:
+      plant: "2"
+      mux: "A1_GND"
+      relay_gpio: "GPIO12"
+      idx: "1"
+  plant3: !include
+    file: packages/plant.yaml
+    vars:
+      plant: "3"
+      mux: "A2_GND"
+      relay_gpio: "GPIO13"
+      idx: "2"
+  plant4: !include
+    file: packages/plant.yaml
+    vars:
+      plant: "4"
+      mux: "A3_GND"
+      relay_gpio: "GPIO14"
+      idx: "3"
 
 esp32:
   board: esp32-s3-devkitc-1
   framework:
     type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESPTOOLPY_FLASHSIZE_16MB: y
+      CONFIG_ESP32S3_SPIRAM_SUPPORT: y
 
-# Enable logging
 logger:
 
 # Enable Home Assistant API
@@ -19,18 +51,16 @@ api:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_pswd
-  
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
-  ap:
-    ssid: "ESP32-S3-4Plants"
-    password: !secret ap_pswd
 
-captive_portal:
 
 # OTA for updates via WiFi
 ota:
   - platform: esphome
     password: !secret ota_pswd
+
+time:
+  - platform: sntp
+    id: sntp_time
 
 # I2C Bus for ADS1115 ADC module
 i2c:
@@ -47,52 +77,105 @@ ads1115:
 
 # Calibration values for soil moisture sensors
 globals:
+  # Global irrigation concurrency and timing
+  - id: irrigation_active
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: active_plant_id
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: idle_tick_seconds
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: session_start_ts
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Per-plant arrays (index 0..3 -> plants 1..4)
+  - id: lockout_until
+    type: std::array<uint32_t, 4>
+    restore_value: yes
+    initial_value: '{0,0,0,0}'
+  - id: last_moisture_pct
+    type: std::array<float, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: prev_moisture_pct
+    type: std::array<float, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: last_moisture_ts
+    type: std::array<uint32_t, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: prev_moisture_ts
+    type: std::array<uint32_t, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: last_session_cycles
+    type: std::array<int, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: last_session_duration_s
+    type: std::array<int, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: cycle_count
+    type: std::array<int, 4>
+    restore_value: no
+    initial_value: '{0,0,0,0}'
+  - id: calibration_dry
+    type: std::array<float, 4>
+    restore_value: yes
+    initial_value: '{3.3,3.3,3.3,3.3}'
+  - id: calibration_wet
+    type: std::array<float, 4>
+    restore_value: yes
+    initial_value: '{1.5,1.5,1.5,1.5}'
+
   # Plant 1 calibration
-  - id: plant1_calibration_dry
-    type: float
-    restore_value: yes
-    initial_value: '3.3'
-  - id: plant1_calibration_wet
-    type: float
-    restore_value: yes
-    initial_value: '1.5'
+  # removed per-plant calibration; replaced with arrays calibration_dry/wet
 
-  # Plant 2 calibration
-  - id: plant2_calibration_dry
-    type: float
-    restore_value: yes
-    initial_value: '3.3'
-  - id: plant2_calibration_wet
-    type: float
-    restore_value: yes
-    initial_value: '1.5'
 
-  # Plant 3 calibration
-  - id: plant3_calibration_dry
-    type: float
-    restore_value: yes
-    initial_value: '3.3'
-  - id: plant3_calibration_wet
-    type: float
-    restore_value: yes
-    initial_value: '1.5'
+  # Per-plant lockouts (epoch seconds when next session is allowed)
+  # Deprecated per-plant lockouts replaced by array lockout_until[4]
 
-  # Plant 4 calibration
-  - id: plant4_calibration_dry
+  # Per-plant recent moisture readings and timestamps for ROC
+  # removed per-plant moisture history; using arrays last/prev values
+
+
+  # Generic flags for loops (single concurrency allows reuse)
+  - id: stabilizing_loop_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: continue_cycles
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: manual_stop_requested
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: stabilize_deadline_ts
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: current_roc
     type: float
-    restore_value: yes
-    initial_value: '3.3'
-  - id: plant4_calibration_wet
-    type: float
-    restore_value: yes
-    initial_value: '1.5'
+    restore_value: no
+    initial_value: '0.0'
 
 # Water tank level sensor (JSN-SR04T)
 sensor:
   # Water tank level sensor
   - platform: ultrasonic
     trigger_pin: GPIO3
-    echo_pin: GPI46
+    echo_pin: GPIO46
     name: "Water Tank Level"
     id: water_tank_level
     unit_of_measurement: "cm"
@@ -112,344 +195,83 @@ sensor:
           if (level_percentage < 0.0) return 0.0;
           return level_percentage;
     icon: "mdi:water-percent"
-
-  # Plant 1 Soil Moisture Sensor
-  - platform: ads1115
-    multiplexer: 'A0_GND'
-    gain: 6.144
-    name: "Plant 1 Soil Moisture"
-    id: plant1_moisture_raw
-    unit_of_measurement: "%"
-    accuracy_decimals: 1
-    update_interval: 30s
-    ads1115_id: ads1115_hub
-    filters:
-      - median:
-          window_size: 5
-          send_every: 3
-      - lambda: |
-          // Dynamic calibration using global variables
-          float dry_val = id(plant1_calibration_dry);
-          float wet_val = id(plant1_calibration_wet);
-          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
-          if (percentage > 100.0) return 100.0;
-          if (percentage < 0.0) return 0.0;
-          return percentage;
-    icon: "mdi:water-percent"
-
-  # Plant 2 Soil Moisture Sensor
-  - platform: ads1115
-    multiplexer: 'A1_GND'
-    gain: 6.144
-    name: "Plant 2 Soil Moisture"
-    id: plant2_moisture_raw
-    unit_of_measurement: "%"
-    accuracy_decimals: 1
-    update_interval: 30s
-    ads1115_id: ads1115_hub
-    filters:
-      - median:
-          window_size: 5
-          send_every: 3
-      - lambda: |
-          float dry_val = id(plant2_calibration_dry);
-          float wet_val = id(plant2_calibration_wet);
-          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
-          if (percentage > 100.0) return 100.0;
-          if (percentage < 0.0) return 0.0;
-          return percentage;
-    icon: "mdi:water-percent"
-
-  # Plant 3 Soil Moisture Sensor
-  - platform: ads1115
-    multiplexer: 'A2_GND'
-    gain: 6.144
-    name: "Plant 3 Soil Moisture"
-    id: plant3_moisture_raw
-    unit_of_measurement: "%"
-    accuracy_decimals: 1
-    update_interval: 30s
-    ads1115_id: ads1115_hub
-    filters:
-      - median:
-          window_size: 5
-          send_every: 3
-      - lambda: |
-          float dry_val = id(plant3_calibration_dry);
-          float wet_val = id(plant3_calibration_wet);
-          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
-          if (percentage > 100.0) return 100.0;
-          if (percentage < 0.0) return 0.0;
-          return percentage;
-    icon: "mdi:water-percent"
-
-  # Plant 4 Soil Moisture Sensor
-  - platform: ads1115
-    multiplexer: 'A3_GND'
-    gain: 6.144
-    name: "Plant 4 Soil Moisture"
-    id: plant4_moisture_raw
-    unit_of_measurement: "%"
-    accuracy_decimals: 1
-    update_interval: 30s
-    ads1115_id: ads1115_hub
-    filters:
-      - median:
-          window_size: 5
-          send_every: 3
-      - lambda: |
-          float dry_val = id(plant4_calibration_dry);
-          float wet_val = id(plant4_calibration_wet);
-          float percentage = ((dry_val - x) / (dry_val - wet_val)) * 100.0;
-          if (percentage > 100.0) return 100.0;
-          if (percentage < 0.0) return 0.0;
-          return percentage;
-    icon: "mdi:water-percent"
+    on_value:
+      then:
+        - lambda: |
+            // Update low water level problem binary sensor via template lambda already
+            // No additional logic here; tank guards will be checked in scripts
 
   # System uptime
   - platform: uptime
     name: "System Uptime"
     update_interval: 60s
+  # Telemetry sensors are defined per plant in the package
 
-# Relay control switches for pumps
+interval:
+  - interval: 1s
+    then:
+      - lambda: |
+          // Drive idle sampling based on HA-configured idle interval
+          if (!id(irrigation_active)) {
+            id(idle_tick_seconds) += 1;
+            int idle_interval = (int) id(idle_sampling_interval_s_number).state;
+            if (idle_interval < 30) idle_interval = 30;
+            if (id(idle_tick_seconds) >= idle_interval) {
+              id(idle_tick_seconds) = 0;
+              // Update all moisture sensors once
+              id(plant1_moisture_raw).update();
+              id(plant2_moisture_raw).update();
+              id(plant3_moisture_raw).update();
+              id(plant4_moisture_raw).update();
+            }
+          }
+
+# Switches defined in packages; keep only derived/busy ones if desired
 switch:
-  # Plant 1 Pump Relay
-  - platform: gpio
-    id: plant1_pump_relay
-    pin: 
-      number: GPIO11
-      inverted: true  # Relay modules are typically active LOW
-    internal: true  # Hide from HA, use buttons instead
+  - platform: template
+    name: "Irrigation Busy"
+    id: irrigation_busy_switch
+    lambda: 'return id(irrigation_active);'
+    icon: mdi:play-circle
+    disabled_by_default: true
+    optimistic: true
 
-  # Plant 2 Pump Relay
-  - platform: gpio
-    id: plant2_pump_relay
-    pin: 
-      number: GPIO12
-      inverted: true
-    internal: true
-
-  # Plant 3 Pump Relay
-  - platform: gpio
-    id: plant3_pump_relay
-    pin: 
-      number: GPIO13
-      inverted: true
-    internal: true
-
-  # Plant 4 Pump Relay
-  - platform: gpio
-    id: plant4_pump_relay
-    pin: 
-      number: GPIO14
-      inverted: true
-    internal: true
-
-# System restart button
 button:
   - platform: restart
     name: "Restart System"
 
-# Binary sensors for status monitoring
 binary_sensor:
-  # Low water level alert
   - platform: template
     name: "Low Water Level"
     id: low_water_level
     device_class: problem
     lambda: 'return id(water_tank_level).state < 10.0;'
+  - platform: template
+    name: "Irrigation Busy"
+    id: irrigation_busy
+    device_class: running
+    lambda: 'return id(irrigation_active);'
 
-# Number inputs for Home Assistant control
 number:
-  # Plant 1 Calibration Controls
+  # Global idle sampling interval (seconds)
   - platform: template
-    name: "Plant 1 Calibration Dry"
-    id: plant1_cal_dry_input
+    name: "Idle Sampling Interval (s)"
+    id: idle_sampling_interval_s_number
+    entity_category: config
     optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 3.3
+    min_value: 30
+    max_value: 3600
+    step: 5
+    initial_value: 300
     restore_value: true
-    unit_of_measurement: "V"
+    unit_of_measurement: "s"
     mode: box
-    set_action:
-      - globals.set:
-          id: plant1_calibration_dry
-          value: !lambda 'return x;'
 
-  - platform: template
-    name: "Plant 1 Calibration Wet"
-    id: plant1_cal_wet_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 1.5
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant1_calibration_wet
-          value: !lambda 'return x;'
 
-  # Plant 2 Calibration Controls
-  - platform: template
-    name: "Plant 2 Calibration Dry"
-    id: plant2_cal_dry_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 3.3
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant2_calibration_dry
-          value: !lambda 'return x;'
+## Removed sprinkler component in favor of custom per-plant automation per spec
 
-  - platform: template
-    name: "Plant 2 Calibration Wet"
-    id: plant2_cal_wet_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 1.5
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant2_calibration_wet
-          value: !lambda 'return x;'
-
-  # Plant 3 Calibration Controls
-  - platform: template
-    name: "Plant 3 Calibration Dry"
-    id: plant3_cal_dry_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 3.3
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant3_calibration_dry
-          value: !lambda 'return x;'
-
-  - platform: template
-    name: "Plant 3 Calibration Wet"
-    id: plant3_cal_wet_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 1.5
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant3_calibration_wet
-          value: !lambda 'return x;'
-
-  # Plant 4 Calibration Controls
-  - platform: template
-    name: "Plant 4 Calibration Dry"
-    id: plant4_cal_dry_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 3.3
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant4_calibration_dry
-          value: !lambda 'return x;'
-
-  - platform: template
-    name: "Plant 4 Calibration Wet"
-    id: plant4_cal_wet_input
-    optimistic: true
-    min_value: 0.0
-    max_value: 3.3
-    step: 0.1
-    initial_value: 1.5
-    restore_value: true
-    unit_of_measurement: "V"
-    mode: box
-    set_action:
-      - globals.set:
-          id: plant4_calibration_wet
-          value: !lambda 'return x;'
-
-# ESPHome Sprinkler Controller for automatic irrigation
-sprinkler:
-  - id: plant_irrigation_controller
-    main_switch: "Irrigation System"
-    auto_advance_switch: "Auto Advance"
-    valve_open_delay: 2s
-    valves:
-      - valve_switch: "Plant 1"
-        enable_switch: "Enable Plant 1"
-        run_duration_number:
-          id: plant1_duration_number
-          name: "Plant 1 Run Duration"
-          initial_value: 30
-          min_value: 5
-          max_value: 300
-          step: 5
-          unit_of_measurement: "s"
-          mode: box
-        valve_switch_id: plant1_pump_relay
-      - valve_switch: "Plant 2"
-        enable_switch: "Enable Plant 2"
-        run_duration_number:
-          id: plant2_duration_number
-          name: "Plant 2 Run Duration"
-          initial_value: 30
-          min_value: 5
-          max_value: 300
-          step: 5
-          unit_of_measurement: "s"
-          mode: box
-        valve_switch_id: plant2_pump_relay
-      - valve_switch: "Plant 3"
-        enable_switch: "Enable Plant 3"
-        run_duration_number:
-          id: plant3_duration_number
-          name: "Plant 3 Run Duration"
-          initial_value: 30
-          min_value: 5
-          max_value: 300
-          step: 5
-          unit_of_measurement: "s"
-          mode: box
-        valve_switch_id: plant3_pump_relay
-      - valve_switch: "Plant 4"
-        enable_switch: "Enable Plant 4"
-        run_duration_number:
-          id: plant4_duration_number
-          name: "Plant 4 Run Duration"
-          initial_value: 30
-          min_value: 5
-          max_value: 300
-          step: 5
-          unit_of_measurement: "s"
-          mode: box
-        valve_switch_id: plant4_pump_relay
-
-# Text sensors for system information
 text_sensor:
   - platform: version
     name: "ESPHome Version" 
+
+# per-plant scripts moved to package

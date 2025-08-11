@@ -150,6 +150,7 @@ switch:
           condition:
             lambda: 'return !id(irrigation_active);'
           then:
+            - lambda: 'id(lockout_until)[${idx}] = 0;'
             - script.execute: irrigate_plant${plant}
     turn_off_action:
       - if:
@@ -158,6 +159,12 @@ switch:
           then:
             - lambda: 'id(manual_stop_requested) = true; id(stabilizing_loop_active) = false;'
             - switch.turn_off: plant${plant}_pump_relay
+            - script.stop: irrigate_plant${plant}
+            - lambda: |
+                id(irrigation_active) = false;
+                id(active_plant_id) = 0;
+                id(irrigation_state_plant${plant}).publish_state("Stopped");
+                id(session_reason_plant${plant}).publish_state("ManualStop");
 
 button:
   # Auto-calibration buttons

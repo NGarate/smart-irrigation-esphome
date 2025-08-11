@@ -39,6 +39,9 @@ esp32:
     sdkconfig_options:
       CONFIG_ESPTOOLPY_FLASHSIZE_16MB: y
       CONFIG_ESP32S3_SPIRAM_SUPPORT: y
+      CONFIG_SPIRAM_TYPE_AUTO: y
+      CONFIG_SPIRAM_MODE_OCT: y
+      CONFIG_SPIRAM_SPEED_80M: y
 
 logger:
 
@@ -51,7 +54,13 @@ api:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_pswd
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "ESP32-S3-4Plants"
+    password: !secret ap_pswd
 
+captive_portal:
 
 # OTA for updates via WiFi
 ota:

@@ -146,6 +146,12 @@ globals:
     restore_value: yes
     initial_value: '{1.5,1.5,1.5,1.5}'
 
+  # Preserve Auto Enable state during calibration per plant
+  - id: prev_auto_enable
+    type: std::array<bool, 4>
+    restore_value: no
+    initial_value: '{false,false,false,false}'
+
   # Plant 1 calibration
   # removed per-plant calibration; replaced with arrays calibration_dry/wet
 

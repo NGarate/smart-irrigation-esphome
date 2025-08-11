@@ -51,6 +51,15 @@ sensor:
               }
             }
 
+  # Raw voltage reader (internal) for auto-calibration
+  - platform: ads1115
+    multiplexer: '${mux}'
+    ads1115_id: ads1115_hub
+    gain: 6.144
+    id: plant${plant}_moisture_v_raw
+    internal: true
+    update_interval: never
+
   # Telemetry
   - platform: template
     name: 'Plant ${plant} Last Session Cycles'
@@ -118,6 +127,47 @@ button:
               lambda: 'return id(irrigation_active) && id(active_plant_id) == ${plant};'
             then:
               - lambda: 'id(manual_stop_requested) = true;'
+
+  # Auto-calibration buttons
+  - platform: template
+    name: 'Calibrate Wet Plant ${plant} (100%)'
+    id: calibrate_wet_plant${plant}
+    on_press:
+      then:
+        - lambda: 'id(prev_auto_enable)[${idx}] = id(enable_auto_plant${plant}).state;'
+        - switch.turn_off: enable_auto_plant${plant}
+        - component.update: plant${plant}_moisture_v_raw
+        - delay: 500ms
+        - lambda: |
+            float v = id(plant${plant}_moisture_v_raw).state;
+            id(calibration_wet)[${idx}] = v;
+            id(plant${plant}_cal_wet_input).publish_state(v);
+        - component.update: plant${plant}_moisture_raw
+        - if:
+            condition:
+              lambda: 'return id(prev_auto_enable)[${idx}];'
+            then:
+              - switch.turn_on: enable_auto_plant${plant}
+
+  - platform: template
+    name: 'Calibrate Dry Plant ${plant} (0%)'
+    id: calibrate_dry_plant${plant}
+    on_press:
+      then:
+        - lambda: 'id(prev_auto_enable)[${idx}] = id(enable_auto_plant${plant}).state;'
+        - switch.turn_off: enable_auto_plant${plant}
+        - component.update: plant${plant}_moisture_v_raw
+        - delay: 500ms
+        - lambda: |
+            float v = id(plant${plant}_moisture_v_raw).state;
+            id(calibration_dry)[${idx}] = v;
+            id(plant${plant}_cal_dry_input).publish_state(v);
+        - component.update: plant${plant}_moisture_raw
+        - if:
+            condition:
+              lambda: 'return id(prev_auto_enable)[${idx}];'
+            then:
+              - switch.turn_on: enable_auto_plant${plant}
 
 text_sensor:
   - platform: template

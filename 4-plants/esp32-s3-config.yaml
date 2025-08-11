@@ -341,11 +341,6 @@ number:
     unit_of_measurement: "min"
     mode: box
 
-
-## Removed sprinkler component in favor of custom per-plant automation per spec
-
 text_sensor:
   - platform: version
     name: "ESPHome Version" 
-
-# per-plant scripts moved to package

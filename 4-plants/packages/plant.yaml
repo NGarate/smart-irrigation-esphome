@@ -62,6 +62,24 @@ sensor:
     unit_of_measurement: 'V'
     accuracy_decimals: 3
 
+  # Sync calibration from Home Assistant helpers (persisted in HA)
+  - platform: homeassistant
+    id: ha_plant${plant}_cal_dry
+    entity_id: input_number.plant${plant}_cal_dry
+    on_value:
+      then:
+        - lambda: |
+            id(calibration_dry)[${idx}] = x;
+            id(plant${plant}_cal_dry_input).publish_state(x);
+  - platform: homeassistant
+    id: ha_plant${plant}_cal_wet
+    entity_id: input_number.plant${plant}_cal_wet
+    on_value:
+      then:
+        - lambda: |
+            id(calibration_wet)[${idx}] = x;
+            id(plant${plant}_cal_wet_input).publish_state(x);
+
   # Telemetry
   - platform: template
     name: 'Plant ${plant} Last Session Cycles'
@@ -156,6 +174,11 @@ button:
             float v = id(plant${plant}_moisture_v_raw).state;
             id(calibration_wet)[${idx}] = v;
             id(plant${plant}_cal_wet_input).publish_state(v);
+        - homeassistant.service:
+            service: input_number.set_value
+            data:
+              entity_id: input_number.plant${plant}_cal_wet
+              value: !lambda 'return id(plant${plant}_moisture_v_raw).state;'
         - component.update: plant${plant}_moisture_raw
         - if:
             condition:
@@ -176,6 +199,11 @@ button:
             float v = id(plant${plant}_moisture_v_raw).state;
             id(calibration_dry)[${idx}] = v;
             id(plant${plant}_cal_dry_input).publish_state(v);
+        - homeassistant.service:
+            service: input_number.set_value
+            data:
+              entity_id: input_number.plant${plant}_cal_dry
+              value: !lambda 'return id(plant${plant}_moisture_v_raw).state;'
         - component.update: plant${plant}_moisture_raw
         - if:
             condition:
@@ -208,6 +236,11 @@ number:
     mode: box
     set_action:
       - lambda: 'id(calibration_dry)[${idx}] = x;'
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.plant${plant}_cal_dry
+            value: !lambda 'return x;'
   - platform: template
     name: 'Plant ${plant} Calibration Wet'
     id: plant${plant}_cal_wet_input
@@ -221,6 +254,11 @@ number:
     mode: box
     set_action:
       - lambda: 'id(calibration_wet)[${idx}] = x;'
+      - homeassistant.service:
+          service: input_number.set_value
+          data:
+            entity_id: input_number.plant${plant}_cal_wet
+            value: !lambda 'return x;'
 
   # Thresholds and timings
   - platform: template

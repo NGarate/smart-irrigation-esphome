@@ -121,23 +121,27 @@ switch:
                 id(irrigation_state_plant${plant}).publish_state("Stopped");
                 id(session_reason_plant${plant}).publish_state("ManualStop");
 
-button:
+  # Manual irrigation switch per plant (toggle irrigation session)
   - platform: template
     name: 'Irrigate Plant ${plant}'
-    id: irrigate_btn_plant${plant}
-    on_press:
-      then:
-        - if:
-            condition:
-              lambda: 'return !id(irrigation_active);'
-            then:
-              - script.execute: irrigate_plant${plant}
-        - if:
-            condition:
-              lambda: 'return id(irrigation_active) && id(active_plant_id) == ${plant};'
-            then:
-              - lambda: 'id(manual_stop_requested) = true;'
+    id: irrigate_switch_plant${plant}
+    optimistic: false
+    lambda: 'return id(irrigation_active) && id(active_plant_id) == ${plant};'
+    turn_on_action:
+      - if:
+          condition:
+            lambda: 'return !id(irrigation_active);'
+          then:
+            - script.execute: irrigate_plant${plant}
+    turn_off_action:
+      - if:
+          condition:
+            lambda: 'return id(irrigation_active) && id(active_plant_id) == ${plant};'
+          then:
+            - lambda: 'id(manual_stop_requested) = true; id(stabilizing_loop_active) = false;'
+            - switch.turn_off: plant${plant}_pump_relay
 
+button:
   # Auto-calibration buttons
   - platform: template
     name: 'Calibrate Wet Plant ${plant} (100%)'

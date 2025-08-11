@@ -254,6 +254,16 @@ switch:
 button:
   - platform: restart
     name: "Restart System"
+  - platform: template
+    name: "Update Sensors Now"
+    id: update_all_sensors_button
+    on_press:
+      then:
+        - component.update: water_tank_level
+        - component.update: plant1_moisture_raw
+        - component.update: plant2_moisture_raw
+        - component.update: plant3_moisture_raw
+        - component.update: plant4_moisture_raw
 
 binary_sensor:
   - platform: template

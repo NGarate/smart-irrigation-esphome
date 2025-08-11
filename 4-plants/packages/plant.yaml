@@ -346,9 +346,6 @@ number:
     restore_value: true
     unit_of_measurement: 's'
     mode: box
-  # removed: per-plant Max Cycles; using global control
-  # removed: per-plant Max Session; using global control
-  # removed: per-plant Post Session Lockout; using global control
 
 script:
   - id: irrigate_plant${plant}

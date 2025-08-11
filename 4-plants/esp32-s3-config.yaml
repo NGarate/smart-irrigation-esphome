@@ -152,17 +152,6 @@ globals:
     restore_value: no
     initial_value: '{false,false,false,false}'
 
-  # Plant 1 calibration
-  # removed per-plant calibration; replaced with arrays calibration_dry/wet
-
-
-  # Per-plant lockouts (epoch seconds when next session is allowed)
-  # Deprecated per-plant lockouts replaced by array lockout_until[4]
-
-  # Per-plant recent moisture readings and timestamps for ROC
-  # removed per-plant moisture history; using arrays last/prev values
-
-
   # Generic flags for loops (single concurrency allows reuse)
   - id: stabilizing_loop_active
     type: bool

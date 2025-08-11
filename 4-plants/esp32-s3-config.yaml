@@ -292,6 +292,55 @@ number:
     unit_of_measurement: "s"
     mode: box
 
+  # Global irrigation timing shared by all plants
+  - platform: template
+    name: "Irrigation Sample (s)"
+    id: irrigation_sampling_interval_s
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 10
+    step: 1
+    initial_value: 2
+    restore_value: true
+    unit_of_measurement: "s"
+    mode: box
+  - platform: template
+    name: "Max Cycles"
+    id: max_cycles
+    entity_category: config
+    optimistic: true
+    min_value: 1
+    max_value: 20
+    step: 1
+    initial_value: 8
+    restore_value: true
+    mode: box
+  - platform: template
+    name: "Max Session (s)"
+    id: max_session_s
+    entity_category: config
+    optimistic: true
+    min_value: 30
+    max_value: 3600
+    step: 10
+    initial_value: 600
+    restore_value: true
+    unit_of_measurement: "s"
+    mode: box
+  - platform: template
+    name: "Post Session Lockout (min)"
+    id: post_session_lockout_min
+    entity_category: config
+    optimistic: true
+    min_value: 0
+    max_value: 720
+    step: 5
+    initial_value: 60
+    restore_value: true
+    unit_of_measurement: "min"
+    mode: box
+
 
 ## Removed sprinkler component in favor of custom per-plant automation per spec
 

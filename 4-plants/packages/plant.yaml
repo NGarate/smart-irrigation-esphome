@@ -283,18 +283,7 @@ number:
     restore_value: true
     unit_of_measurement: 's'
     mode: box
-  - platform: template
-    name: 'Plant ${plant} Irrigation Sample (s)'
-    id: plant${plant}_irrigation_sampling_interval_s
-    entity_category: config
-    optimistic: true
-    min_value: 1
-    max_value: 10
-    step: 1
-    initial_value: 2
-    restore_value: true
-    unit_of_measurement: 's'
-    mode: box
+  # removed: per-plant Irrigation Sample; using global control
   - platform: template
     name: 'Plant ${plant} ROC Threshold (%/s)'
     id: plant${plant}_roc_threshold_pct_per_s
@@ -319,41 +308,9 @@ number:
     restore_value: true
     unit_of_measurement: 's'
     mode: box
-  - platform: template
-    name: 'Plant ${plant} Max Cycles'
-    id: plant${plant}_max_cycles
-    entity_category: config
-    optimistic: true
-    min_value: 1
-    max_value: 20
-    step: 1
-    initial_value: 8
-    restore_value: true
-    mode: box
-  - platform: template
-    name: 'Plant ${plant} Max Session (s)'
-    id: plant${plant}_max_session_s
-    entity_category: config
-    optimistic: true
-    min_value: 30
-    max_value: 3600
-    step: 10
-    initial_value: 600
-    restore_value: true
-    unit_of_measurement: 's'
-    mode: box
-  - platform: template
-    name: 'Plant ${plant} Lockout (min)'
-    id: plant${plant}_post_session_lockout_min
-    entity_category: config
-    optimistic: true
-    min_value: 0
-    max_value: 720
-    step: 5
-    initial_value: 60
-    restore_value: true
-    unit_of_measurement: 'min'
-    mode: box
+  # removed: per-plant Max Cycles; using global control
+  # removed: per-plant Max Session; using global control
+  # removed: per-plant Post Session Lockout; using global control
 
 script:
   - id: irrigate_plant${plant}
@@ -371,7 +328,7 @@ script:
             lambda: |
               int elapsed = (int)(id(sntp_time).now().timestamp - id(session_start_ts));
               bool under = id(plant${plant}_moisture_raw).state < id(plant${plant}_stop_threshold_pct).state;
-              bool caps_ok = (id(cycle_count)[${idx}] < (int) id(plant${plant}_max_cycles).state) && (elapsed < (int) id(plant${plant}_max_session_s).state);
+              bool caps_ok = (id(cycle_count)[${idx}] < (int) id(max_cycles).state) && (elapsed < (int) id(max_session_s).state);
               bool manual = id(manual_stop_requested);
               return under && caps_ok && !manual;
           then:
@@ -416,7 +373,7 @@ script:
                     return roc > id(plant${plant}_roc_threshold_pct_per_s).state;
                 then:
                   - delay: !lambda |-
-                      return (uint32_t)(id(plant${plant}_irrigation_sampling_interval_s).state * 1000);
+                      return (uint32_t)(id(irrigation_sampling_interval_s).state * 1000);
                   - component.update: plant${plant}_moisture_raw
             - lambda: |
                 id(stabilizing_loop_active) = false;
@@ -434,7 +391,7 @@ script:
             id(session_reason_plant${plant}).publish_state("Capped");
           }
           id(irrigation_state_plant${plant}).publish_state("Lockout");
-          id(lockout_until)[${idx}] = end_ts + (uint32_t) (id(plant${plant}_post_session_lockout_min).state * 60.0f);
+          id(lockout_until)[${idx}] = end_ts + (uint32_t) (id(post_session_lockout_min).state * 60.0f);
           id(irrigation_active) = false;
           id(active_plant_id) = 0;
           id(manual_stop_requested) = false;

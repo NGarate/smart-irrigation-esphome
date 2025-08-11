@@ -89,7 +89,9 @@ switch:
   # Pump relay per plant
   - platform: gpio
     id: plant${plant}_pump_relay
-    pin: ${relay_gpio}
+    pin:
+      number: ${relay_gpio}
+      inverted: true
     internal: true
     on_turn_on:
       - lambda: |
@@ -101,7 +103,7 @@ switch:
     name: 'Auto Enable Plant ${plant}'
     id: enable_auto_plant${plant}
     optimistic: true
-    restore_mode: 'RESTORE_DEFAULT_ON'
+    restore_mode: 'RESTORE_DEFAULT_OFF'
     on_turn_off:
       - if:
           condition:
@@ -110,6 +112,12 @@ switch:
             - lambda: 'id(manual_stop_requested) = true;'
             - lambda: 'id(stabilizing_loop_active) = false;'
             - switch.turn_off: plant${plant}_pump_relay
+            - script.stop: irrigate_plant${plant}
+            - lambda: |
+                id(irrigation_active) = false;
+                id(active_plant_id) = 0;
+                id(irrigation_state_plant${plant}).publish_state("Stopped");
+                id(session_reason_plant${plant}).publish_state("ManualStop");
 
 button:
   - platform: template
